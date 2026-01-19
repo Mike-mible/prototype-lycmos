@@ -1,0 +1,7 @@
+{
+  "name": "LyncApp SACCO Admin Dashboard",
+  "description": "A comprehensive B2B control center for SACCO operations, managing trips, segments, revenue, trust, and SMS ticketing.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
