@@ -9,6 +9,15 @@ export enum SegmentState {
 
 export type AllowedAction = 'START' | 'END' | 'CONFIRM_HANDOVER' | 'DECLARE_REVENUE' | 'REPORT_INCIDENT' | 'APPROVE';
 
+export interface OnboardingData {
+  saccoName: string;
+  registrationNumber: string;
+  contactEmail: string;
+  routes: string[];
+  branches: { name: string; location: string }[];
+  vehicles: { plate: string; capacity: number }[];
+}
+
 export interface Branch {
   id: string;
   name: string;
@@ -20,6 +29,7 @@ export interface Vehicle {
   id: string;
   plate: string;
   branchId: string;
+  capacity: number;
   status: 'ACTIVE' | 'IDLE' | 'MAINTENANCE';
   trustScore: number;
   revenueGenerated: number;

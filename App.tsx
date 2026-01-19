@@ -9,8 +9,10 @@ import CrewPage from './pages/Crew';
 import SMSTickets from './pages/SMSTickets';
 import Incidents from './pages/Incidents';
 import RevenueAnalytics from './pages/RevenueAnalytics';
+import Onboarding from './pages/Onboarding';
 import { mosWs } from './services/api';
 import { Bell, Search, User, Zap, ZapOff, Info, X } from 'lucide-react';
+import { OnboardingData } from './types';
 
 interface Notification {
   id: string;
@@ -23,14 +25,18 @@ const App: React.FC = () => {
   const [wsConnected, setWsConnected] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // Check if onboarding is completed
+    const isCompleted = localStorage.getItem('lync_onboarding_completed') === 'true';
+    setOnboardingCompleted(isCompleted);
+
     mosWs.connect();
     const unsubStatus = mosWs.onStatusChange(setWsConnected);
 
     const addNotification = (data: any) => {
       const id = Math.random().toString(36).substring(7);
-      // Fix: Use 'as const' to ensure 'info' is treated as a literal type, satisfying the Notification interface
       setNotifications(prev => [{ id, message: data.message || 'System update received', type: 'info' as const }, ...prev].slice(0, 3));
       setTimeout(() => {
         setNotifications(prev => prev.filter(n => n.id !== id));
@@ -49,6 +55,13 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const handleOnboardingComplete = (data: OnboardingData) => {
+    console.log("Onboarding data received:", data);
+    localStorage.setItem('lync_onboarding_completed', 'true');
+    localStorage.setItem('lync_sacco_name', data.saccoName);
+    setOnboardingCompleted(true);
+  };
+
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard': return <Dashboard />;
@@ -62,6 +75,12 @@ const App: React.FC = () => {
       default: return <Dashboard />;
     }
   };
+
+  if (onboardingCompleted === null) return null; // Wait for initial check
+
+  if (!onboardingCompleted) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -127,7 +146,9 @@ const App: React.FC = () => {
               </div>
               <div className="text-left hidden sm:block">
                 <p className="text-sm font-bold text-slate-900">Admin User</p>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Super Admin</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {localStorage.getItem('lync_sacco_name') || 'Super Admin'}
+                </p>
               </div>
             </button>
           </div>

@@ -1,49 +1,53 @@
 
 import React, { useEffect, useState } from 'react';
 import { mosApi, mosWs } from '../services/api';
-import { Trip, Segment, SegmentState, AllowedAction } from '../types';
-import { Play, Square, Wallet, AlertOctagon, Repeat, CheckCircle2, Search, Filter, RefreshCw } from 'lucide-react';
+import { Trip, Segment, SegmentState, AllowedAction, Vehicle, Crew, Branch } from '../types';
+import { Play, Square, Wallet, AlertOctagon, Repeat, CheckCircle2, Search, Filter, RefreshCw, Plus, X } from 'lucide-react';
 
 const Trips: React.FC = () => {
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [crew, setCrew] = useState<Crew[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({ route: '', segments: [{ branchId: '', vehicleId: '', crewIds: [] as string[] }] });
 
-  const fetchTrips = async (silent = false) => {
-    if (!silent) setLoading(true);
-    else setIsRefreshing(true);
-    
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true); else setIsRefreshing(true);
     try {
-      const data = await mosApi.getTrips();
-      setTrips(data);
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
+      const [t, b, v, c] = await Promise.all([mosApi.getTrips(), mosApi.getBranches(), mosApi.getVehicles(), mosApi.getCrew()]);
+      setTrips(t); setBranches(b); setVehicles(v); setCrew(c);
+    } finally { setLoading(false); setIsRefreshing(false); }
   };
 
   useEffect(() => {
-    fetchTrips();
-
-    // Listen for real-time segment updates
-    const unbind = mosWs.on('SEGMENT_UPDATED', (data) => {
-      console.log("Real-time Update: Segment state changed", data);
-      fetchTrips(true); // Silent refresh
-    });
-
+    fetchData();
+    const unbind = mosWs.on('SEGMENT_UPDATED', () => fetchData(true));
     return () => unbind();
   }, []);
 
   const handleAction = async (segmentId: string, action: AllowedAction) => {
-    try {
-      if (action === 'START') await mosApi.startSegment(segmentId);
-      if (action === 'END') await mosApi.endSegment(segmentId);
-      if (action === 'DECLARE_REVENUE') await mosApi.declareRevenue(segmentId, 5000);
-      
-      await fetchTrips(true);
-    } catch (err) {
-      console.error("Action failed", err);
-    }
+    if (action === 'START') await mosApi.startSegment(segmentId);
+    if (action === 'END') await mosApi.endSegment(segmentId);
+    if (action === 'DECLARE_REVENUE') await mosApi.declareRevenue(segmentId, 5000);
+    fetchData(true);
+  };
+
+  const handleCreateTrip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalSegments = formData.segments.map(s => ({
+      ...s,
+      state: SegmentState.PENDING,
+      revenue: 0,
+      trustScore: 100,
+      allowedActions: ['START'] as AllowedAction[]
+    }));
+    await mosApi.createTrip({ route: formData.route, overallStatus: 'PENDING' }, finalSegments);
+    setShowModal(false);
+    fetchData();
   };
 
   const getStateColor = (state: SegmentState) => {
@@ -61,24 +65,19 @@ const Trips: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
-            Trips & Segments
-            {isRefreshing && <RefreshCw size={16} className="text-blue-500 animate-spin" />}
+            Trips & Segments {isRefreshing && <RefreshCw size={16} className="text-blue-500 animate-spin" />}
           </h1>
           <p className="text-slate-500 font-medium">Manage cross-branch journeys and segments in real-time</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search Trip ID, Route..." 
-              className="pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-64"
-            />
-          </div>
-          <button className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
-            <Filter size={20} className="text-slate-600" />
-          </button>
-        </div>
+        <button 
+          onClick={() => {
+            setFormData({ route: '', segments: [{ branchId: branches[0]?.id || '', vehicleId: vehicles[0]?.id || '', crewIds: [] }] });
+            setShowModal(true);
+          }}
+          className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20"
+        >
+          <Plus size={20} /> Create New Trip
+        </button>
       </div>
 
       <div className="grid gap-6">
@@ -92,14 +91,12 @@ const Trips: React.FC = () => {
                   <span className="text-sm font-bold px-2 py-0.5 bg-blue-100 text-blue-700 rounded uppercase">{trip.id}</span>
                   <h3 className="text-lg font-bold text-slate-800">{trip.route}</h3>
                 </div>
-                <p className="text-slate-500 text-sm mt-1">Multi-segment journey via {trip.segments.length} branches</p>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <p className="text-xs font-semibold text-slate-400 uppercase">Trip Status</p>
-                  <p className="font-bold text-blue-600">{trip.overallStatus}</p>
+                  <p className="text-xs font-semibold text-slate-400 uppercase">Status</p>
+                  <p className="font-bold text-blue-600 uppercase text-xs tracking-widest">{trip.overallStatus}</p>
                 </div>
-                <button className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50">Details</button>
               </div>
             </div>
             
@@ -107,75 +104,32 @@ const Trips: React.FC = () => {
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Segment</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Branch & Vehicle</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Crew</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Revenue</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Trust</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">State</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Segment</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Details</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Revenue</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase">State</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {trip.segments.map(seg => (
-                    <tr key={seg.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={seg.id} className="hover:bg-slate-50/50">
                       <td className="px-6 py-4 font-bold text-slate-700">{seg.id}</td>
                       <td className="px-6 py-4">
-                        <p className="text-sm font-bold text-slate-900">{seg.branchId}</p>
-                        <p className="text-xs font-mono text-slate-500">{seg.vehicleId}</p>
+                        <p className="text-sm font-bold text-slate-900">{branches.find(b => b.id === seg.branchId)?.name || seg.branchId}</p>
+                        <p className="text-xs font-mono text-slate-500 uppercase">{vehicles.find(v => v.id === seg.vehicleId)?.plate || seg.vehicleId}</p>
                       </td>
+                      <td className="px-6 py-4 font-bold text-slate-900">KES {seg.revenue.toLocaleString()}</td>
                       <td className="px-6 py-4">
-                        <div className="flex -space-x-2">
-                          {seg.crewIds.map(cid => (
-                            <div key={cid} className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-[10px] font-bold" title={cid}>
-                              {cid.split('-')[1]}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-bold text-slate-900">
-                        {seg.revenue.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden max-w-[60px]">
-                          <div className={`h-full rounded-full ${seg.trustScore > 90 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${seg.trustScore}%` }}></div>
-                        </div>
-                        <p className="text-[10px] font-bold mt-1 text-slate-500">{seg.trustScore}%</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-md text-[10px] font-black border uppercase ${getStateColor(seg.state)}`}>
-                          {seg.state}
-                        </span>
+                        <span className={`px-2 py-1 rounded-md text-[10px] font-black border uppercase ${getStateColor(seg.state)}`}>{seg.state}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           {seg.allowedActions.includes('START') && (
-                            <button onClick={() => handleAction(seg.id, 'START')} className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-all shadow-sm" title="Start Segment">
-                              <Play size={16} fill="currentColor" />
-                            </button>
+                            <button onClick={() => handleAction(seg.id, 'START')} className="p-2 bg-emerald-100 text-emerald-700 rounded-lg"><Play size={16} fill="currentColor" /></button>
                           )}
                           {seg.allowedActions.includes('END') && (
-                            <button onClick={() => handleAction(seg.id, 'END')} className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-all shadow-sm" title="End Segment">
-                              <Square size={16} fill="currentColor" />
-                            </button>
-                          )}
-                          {seg.allowedActions.includes('DECLARE_REVENUE') && (
-                            <button onClick={() => handleAction(seg.id, 'DECLARE_REVENUE')} className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-all shadow-sm" title="Declare Revenue">
-                              <Wallet size={16} />
-                            </button>
-                          )}
-                          {seg.allowedActions.includes('REPORT_INCIDENT') && (
-                            <button className="p-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-all shadow-sm" title="Report Incident">
-                              <AlertOctagon size={16} />
-                            </button>
-                          )}
-                          {seg.allowedActions.includes('CONFIRM_HANDOVER') && (
-                            <button className="p-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-all shadow-sm" title="Confirm Handover">
-                              <Repeat size={16} />
-                            </button>
-                          )}
-                          {seg.state === SegmentState.CLOSED && (
-                            <div className="text-emerald-500"><CheckCircle2 size={20} /></div>
+                            <button onClick={() => handleAction(seg.id, 'END')} className="p-2 bg-red-100 text-red-700 rounded-lg"><Square size={16} fill="currentColor" /></button>
                           )}
                         </div>
                       </td>
@@ -187,6 +141,62 @@ const Trips: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl my-8 animate-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900">Configure Trip Journey</h2>
+              <button onClick={() => setShowModal(false)}><X size={24} className="text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleCreateTrip} className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Main Route Corridor</label>
+                <input required value={formData.route} onChange={e => setFormData({...formData, route: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border rounded-xl" placeholder="e.g., Nairobi - Mombasa" />
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-slate-800">Journey Segments</h3>
+                  <button type="button" onClick={() => setFormData({...formData, segments: [...formData.segments, { branchId: branches[0]?.id || '', vehicleId: vehicles[0]?.id || '', crewIds: [] }]})} className="text-blue-600 font-bold text-xs flex items-center gap-1"><Plus size={14} /> Add Stage</button>
+                </div>
+                {formData.segments.map((s, idx) => (
+                  <div key={idx} className="p-4 bg-slate-50 border rounded-2xl relative space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Operating Branch</label>
+                        <select value={s.branchId} onChange={e => {
+                          const newSegs = [...formData.segments];
+                          newSegs[idx].branchId = e.target.value;
+                          setFormData({...formData, segments: newSegs});
+                        }} className="w-full px-3 py-2 bg-white border rounded-lg text-sm">
+                          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Vehicle</label>
+                        <select value={s.vehicleId} onChange={e => {
+                          const newSegs = [...formData.segments];
+                          newSegs[idx].vehicleId = e.target.value;
+                          setFormData({...formData, segments: newSegs});
+                        }} className="w-full px-3 py-2 bg-white border rounded-lg text-sm">
+                          {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {idx > 0 && <button type="button" onClick={() => {
+                      const newSegs = [...formData.segments];
+                      newSegs.splice(idx, 1);
+                      setFormData({...formData, segments: newSegs});
+                    }} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={14} /></button>}
+                  </div>
+                ))}
+              </div>
+              <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 shadow-xl shadow-blue-500/20">Initialize Journey</button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
