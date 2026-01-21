@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { mosApi } from '../services/api';
 import { Crew, Branch } from '../types';
-import { User, MoreVertical, X, Plus } from 'lucide-react';
+import { User, MoreVertical, X, Plus, Trash2, Settings, ShieldCheck } from 'lucide-react';
 
 const CrewPage: React.FC = () => {
   const [crew, setCrew] = useState<Crew[]>([]);
@@ -39,59 +39,75 @@ const CrewPage: React.FC = () => {
     setShowModal(true);
   };
 
+  const handleDelete = async (id: string) => {
+    if(!confirm("Remove this crew member from the active database? History will be archived.")) return;
+    await mosApi.deleteCrew(id);
+    fetchData();
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Crew Directory</h1>
-          <p className="text-slate-500 font-medium">Monitor drivers and conductors performance and trust metrics</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Personnel Core</h1>
+          <p className="text-slate-500 font-medium mt-1">Real-time performance and trust scoring for drivers and conductors</p>
         </div>
         <button 
           onClick={() => { setEditingCrew(null); setFormData({ name: '', role: 'DRIVER', branchId: branches[0]?.id || '', status: 'AVAILABLE' }); setShowModal(true); }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-blue-700 transition-all"
+          className="bg-blue-600 text-white px-8 py-3.5 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-2xl shadow-blue-500/30 active:scale-95 flex items-center gap-3"
         >
-          Register New Crew
+          <Plus size={20} /> Register Personnel
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-[40px] shadow-[0_30px_60px_rgba(0,0,0,0.03)] border border-slate-100/80 overflow-hidden">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-100">
-            <tr>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Name & Role</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Branch</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-center">Trust Score</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Action</th>
+          <thead>
+            <tr className="bg-slate-50/80 border-b border-slate-100">
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Name & Designation</th>
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Operating Hub</th>
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Integrity Score</th>
+              <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100/50">
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-10 text-slate-400">Loading crew data...</td></tr>
+              <tr><td colSpan={5} className="text-center py-20 text-slate-400 font-black uppercase tracking-widest text-xs">Accessing Distributed Personnel Data...</td></tr>
+            ) : crew.length === 0 ? (
+              <tr><td colSpan={5} className="text-center py-20 text-slate-400 font-medium">No personnel found.</td></tr>
             ) : crew.map(c => (
-              <tr key={c.id} className="hover:bg-slate-50 transition-colors group">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-600 font-bold border border-slate-200">{c.name.charAt(0)}</div>
+              <tr key={c.id} className="hover:bg-slate-50/50 transition-all duration-300 group">
+                <td className="px-10 py-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-black text-xl shadow-lg shadow-slate-900/10 border border-slate-800">{c.name.charAt(0)}</div>
                     <div>
-                      <p className="font-bold text-slate-900">{c.name}</p>
-                      <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{c.role}</p>
+                      <p className="font-black text-slate-900 text-lg tracking-tight">{c.name}</p>
+                      <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em]">{c.role}</p>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-slate-600 font-medium">{branches.find(b => b.id === c.branchId)?.name || c.branchId}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
-                    c.status === 'ASSIGNED' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+                <td className="px-10 py-6 text-sm text-slate-600 font-black uppercase tracking-widest">{branches.find(b => b.id === c.branchId)?.name || 'Central'}</td>
+                <td className="px-10 py-6">
+                  <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                    c.status === 'ASSIGNED' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' : 
+                    c.status === 'AVAILABLE' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                    'bg-slate-50 text-slate-400 border-slate-100'
                   }`}>
                     {c.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-center">
-                  <span className={`text-sm font-bold ${c.trustScore > 90 ? 'text-emerald-600' : 'text-amber-600'}`}>{c.trustScore}%</span>
+                <td className="px-10 py-6 text-center">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
+                    <ShieldCheck size={14} className={c.trustScore > 90 ? 'text-emerald-500' : 'text-amber-500'} />
+                    <span className={`text-sm font-black ${c.trustScore > 90 ? 'text-emerald-600' : 'text-amber-600'}`}>{c.trustScore}%</span>
+                  </div>
                 </td>
-                <td className="px-6 py-4 text-right">
-                   <button onClick={() => openEdit(c)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"><MoreVertical size={18} /></button>
+                <td className="px-10 py-6 text-right">
+                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                      <button onClick={() => openEdit(c)} className="p-2.5 bg-white border border-slate-100 rounded-xl hover:shadow-lg text-slate-400 hover:text-slate-900"><Settings size={18} /></button>
+                      <button onClick={() => handleDelete(c.id)} className="p-2.5 bg-white border border-slate-100 rounded-xl hover:shadow-lg text-slate-300 hover:text-red-500"><Trash2 size={18} /></button>
+                   </div>
                 </td>
               </tr>
             ))}
@@ -100,42 +116,47 @@ const CrewPage: React.FC = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl animate-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-900">{editingCrew ? 'Edit' : 'New'} Crew Member</h2>
-              <button onClick={() => setShowModal(false)}><X size={24} className="text-slate-400" /></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[48px] w-full max-w-lg shadow-[0_40px_100px_rgba(0,0,0,0.2)] animate-in zoom-in duration-300 overflow-hidden border border-white">
+            <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">{editingCrew ? 'Update Identity' : 'Personnel Induction'}</h2>
+                <p className="text-slate-500 font-medium">Configure credentials and operational scope</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="p-4 hover:bg-white rounded-full transition-all shadow-sm"><X size={24} className="text-slate-400" /></button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Full Name</label>
-                <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2 bg-slate-50 border rounded-xl" placeholder="e.g., Peter Parker" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="p-10 space-y-8">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Role</label>
-                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full px-4 py-2 bg-slate-50 border rounded-xl">
-                    <option value="DRIVER">DRIVER</option>
-                    <option value="CONDUCTOR">CONDUCTOR</option>
-                  </select>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Legal Full Name</label>
+                  <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[28px] font-black text-xl tracking-tight focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-inner" placeholder="E.G. PETER PARKER" />
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Designated Role</label>
+                    <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[28px] font-black text-sm outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer shadow-inner">
+                      <option value="DRIVER">DRIVER</option>
+                      <option value="CONDUCTOR">CONDUCTOR</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Initial Status</label>
+                    <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[28px] font-black text-sm outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer shadow-inner">
+                      <option value="AVAILABLE">AVAILABLE</option>
+                      <option value="ASSIGNED">ASSIGNED</option>
+                      <option value="OFF-DUTY">OFF-DUTY</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Status</label>
-                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-4 py-2 bg-slate-50 border rounded-xl">
-                    <option value="AVAILABLE">AVAILABLE</option>
-                    <option value="ASSIGNED">ASSIGNED</option>
-                    <option value="OFF-DUTY">OFF-DUTY</option>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Assigned Hub Node</label>
+                  <select required value={formData.branchId} onChange={e => setFormData({...formData, branchId: e.target.value})} className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[28px] font-black text-sm outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer shadow-inner">
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Assigned Branch</label>
-                <select required value={formData.branchId} onChange={e => setFormData({...formData, branchId: e.target.value})} className="w-full px-4 py-2 bg-slate-50 border rounded-xl">
-                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <button type="submit" className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">
-                {editingCrew ? 'Update' : 'Register'} Member
+              <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95">
+                {editingCrew ? 'Commit Identity Update' : 'Initialize Personnel Node'}
               </button>
             </form>
           </div>

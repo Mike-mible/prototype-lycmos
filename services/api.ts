@@ -128,16 +128,21 @@ export const mosApi = {
     return await supabase.from('trips').update(tripData).eq('id', id);
   },
 
+  deleteTrip: async (id: string) => {
+    await supabase.from('segments').delete().eq('tripId', id);
+    return await supabase.from('trips').delete().eq('id', id);
+  },
+
   startSegment: async (id: string) => {
-    return await supabase.from('segments').update({ state: SegmentState.ACTIVE, startTime: new Date().toISOString() }).eq('id', id);
+    return await supabase.from('segments').update({ state: SegmentState.ACTIVE, startTime: new Date().toISOString(), allowedActions: ['END', 'DECLARE_REVENUE', 'REPORT_INCIDENT'] }).eq('id', id);
   },
 
   endSegment: async (id: string) => {
-    return await supabase.from('segments').update({ state: SegmentState.CLOSED, endTime: new Date().toISOString() }).eq('id', id);
+    return await supabase.from('segments').update({ state: SegmentState.CLOSED, endTime: new Date().toISOString(), allowedActions: [] }).eq('id', id);
   },
 
   confirmHandover: async (id: string) => {
-    return await supabase.from('segments').update({ state: SegmentState.ACTIVE }).eq('id', id);
+    return await supabase.from('segments').update({ state: SegmentState.ACTIVE, allowedActions: ['END', 'DECLARE_REVENUE'] }).eq('id', id);
   },
 
   declareRevenue: async (id: string, amount: number) => {
@@ -158,6 +163,10 @@ export const mosApi = {
     return await supabase.from('branches').update(branch).eq('id', id);
   },
 
+  deleteBranch: async (id: string) => {
+    return await supabase.from('branches').delete().eq('id', id);
+  },
+
   getVehicles: async (): Promise<Vehicle[]> => {
     const { data } = await supabase.from('vehicles').select('*');
     return data || [];
@@ -169,6 +178,10 @@ export const mosApi = {
 
   updateVehicle: async (id: string, vehicle: Partial<Vehicle>) => {
     return await supabase.from('vehicles').update(vehicle).eq('id', id);
+  },
+
+  deleteVehicle: async (id: string) => {
+    return await supabase.from('vehicles').delete().eq('id', id);
   },
 
   getCrew: async (): Promise<Crew[]> => {
@@ -184,6 +197,10 @@ export const mosApi = {
     return await supabase.from('crew').update(crew).eq('id', id);
   },
 
+  deleteCrew: async (id: string) => {
+    return await supabase.from('crew').delete().eq('id', id);
+  },
+
   getSMSTickets: async (): Promise<SMSTicket[]> => {
     const { data } = await supabase.from('sms_tickets').select('*').order('timestamp', { ascending: false });
     return data || [];
@@ -193,8 +210,20 @@ export const mosApi = {
     return await supabase.from('sms_tickets').update({ status: 'CONFIRMED' }).eq('id', id);
   },
 
+  cancelTicket: async (id: string) => {
+    return await supabase.from('sms_tickets').update({ status: 'CANCELLED' }).eq('id', id);
+  },
+
   getIncidents: async (): Promise<Incident[]> => {
     const { data } = await supabase.from('incidents').select('*').order('timestamp', { ascending: false });
     return data || [];
+  },
+
+  resolveIncident: async (id: string) => {
+    return await supabase.from('incidents').update({ status: 'RESOLVED' }).eq('id', id);
+  },
+
+  escalateIncident: async (id: string) => {
+    return await supabase.from('incidents').update({ status: 'ESCALATED' }).eq('id', id);
   }
 };

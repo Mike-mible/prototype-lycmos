@@ -2,12 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { mosApi, mosWs } from '../services/api';
 import { SMSTicket } from '../types';
-import { MessageSquare, CheckCircle2, XCircle, Clock, Search } from 'lucide-react';
+import { MessageSquare, CheckCircle2, XCircle, Clock, Search, ShieldX } from 'lucide-react';
 
 const SMSTickets: React.FC = () => {
   const [tickets, setTickets] = useState<SMSTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTicketId, setNewTicketId] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const fetchTickets = async () => {
     const data = await mosApi.getSMSTickets();
@@ -28,8 +29,18 @@ const SMSTickets: React.FC = () => {
   }, []);
 
   const handleConfirm = async (id: string) => {
+    setProcessingId(id);
     await mosApi.confirmTicket(id);
-    fetchTickets();
+    await fetchTickets();
+    setProcessingId(null);
+  };
+
+  const handleCancel = async (id: string) => {
+    if(!confirm("Are you sure you want to cancel this booking request?")) return;
+    setProcessingId(id);
+    await mosApi.cancelTicket(id);
+    await fetchTickets();
+    setProcessingId(null);
   };
 
   return (
@@ -41,20 +52,20 @@ const SMSTickets: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
               placeholder="Search phone number or trip ID..." 
-              className="pl-10 pr-4 py-2 w-full rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="pl-10 pr-4 py-2.5 w-full rounded-2xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
             />
           </div>
           <div className="flex gap-2">
-            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg border border-emerald-100 flex items-center gap-2">
+            <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 text-xs font-black uppercase tracking-widest rounded-full border border-emerald-100 flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
-              Live Feed
+              Live Link
             </span>
           </div>
         </div>
@@ -63,59 +74,71 @@ const SMSTickets: React.FC = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50">
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Passenger Phone</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Trip & Segment</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Amount</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Time</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Action</th>
+                <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Passenger Phone</th>
+                <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Trip Journey</th>
+                <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Amount</th>
+                <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Status</th>
+                <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Time</th>
+                <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={6} className="text-center py-10 text-slate-400">Loading tickets...</td></tr>
+                <tr><td colSpan={6} className="text-center py-20 text-slate-400 font-medium">Awaiting uplink...</td></tr>
+              ) : tickets.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-20 text-slate-400 font-medium">No booking requests found.</td></tr>
               ) : tickets.map(t => (
-                <tr key={t.id} className={`transition-all duration-700 ${newTicketId === t.id ? 'bg-blue-50 animate-pulse border-y border-blue-200' : 'hover:bg-slate-50'}`}>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare size={16} className="text-slate-400" />
-                      <span className="font-bold text-slate-900">{t.passengerPhone}</span>
+                <tr key={t.id} className={`transition-all duration-700 ${newTicketId === t.id ? 'bg-blue-50 animate-pulse border-y border-blue-200' : 'hover:bg-slate-50/50'}`}>
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-slate-100 rounded-lg"><MessageSquare size={16} className="text-slate-500" /></div>
+                      <span className="font-bold text-slate-900 tracking-tight">{t.passengerPhone}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-bold text-slate-700">{t.tripId}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{t.segmentId}</p>
+                  <td className="px-8 py-5">
+                    <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{t.tripId}</p>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">{t.segmentId}</p>
                   </td>
-                  <td className="px-6 py-4 font-bold text-slate-900">KES {t.amount}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase ${
-                      t.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                  <td className="px-8 py-5 font-black text-slate-900">KES {t.amount}</td>
+                  <td className="px-8 py-5">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                      t.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
+                      t.status === 'CANCELLED' ? 'bg-red-50 text-red-700 border-red-100' :
+                      'bg-amber-50 text-amber-700 border-amber-100'
                     }`}>
                       {t.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1 text-slate-500 text-xs">
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-1.5 text-slate-400 text-xs font-medium">
                       <Clock size={12} />
                       {new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-8 py-5 text-right">
                     {t.status === 'PENDING' ? (
                       <div className="flex justify-end gap-2">
                         <button 
+                          disabled={processingId === t.id}
                           onClick={() => handleConfirm(t.id)}
-                          className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors"
+                          className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all active:scale-95 disabled:opacity-50 border border-emerald-100"
                           title="Confirm Booking"
                         >
                           <CheckCircle2 size={18} />
                         </button>
-                        <button className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors" title="Cancel Request">
-                          <XCircle size={18} />
+                        <button 
+                          disabled={processingId === t.id}
+                          onClick={() => handleCancel(t.id)}
+                          className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all active:scale-95 disabled:opacity-50 border border-red-100" 
+                          title="Cancel Request"
+                        >
+                          < ShieldX size={18} />
                         </button>
                       </div>
                     ) : (
-                      <span className="text-emerald-500 font-bold text-xs">Processed</span>
+                      <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${t.status === 'CONFIRMED' ? 'text-emerald-500' : 'text-red-400'}`}>
+                        {t.status === 'CONFIRMED' ? 'PROCESSED' : 'REJECTED'}
+                      </span>
                     )}
                   </td>
                 </tr>
