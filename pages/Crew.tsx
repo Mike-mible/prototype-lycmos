@@ -1,36 +1,73 @@
 
-import React, { useEffect, useState } from 'react';
-import { mosApi } from '../services/api';
+import React, { useEffect, useState, useMemo } from 'react';
+import { mosApi, mosWs } from '../services/api';
 import { Crew, Branch } from '../types';
-import { User, MoreVertical, X, Plus, Trash2, Settings, ShieldCheck } from 'lucide-react';
+import { User, MoreVertical, X, Plus, Trash2, Settings, ShieldCheck, RefreshCw } from 'lucide-react';
 
-const CrewPage: React.FC = () => {
+interface CrewPageProps {
+  searchQuery?: string;
+}
+
+const CrewPage: React.FC<CrewPageProps> = ({ searchQuery = '' }) => {
   const [crew, setCrew] = useState<Crew[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingCrew, setEditingCrew] = useState<Crew | null>(null);
   const [formData, setFormData] = useState({ name: '', role: 'DRIVER' as any, branchId: '', status: 'AVAILABLE' as any });
 
-  const fetchData = async () => {
-    setLoading(true);
-    const [c, b] = await Promise.all([mosApi.getCrew(), mosApi.getBranches()]);
-    setCrew(c);
-    setBranches(b);
-    setLoading(false);
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true); else setIsRefreshing(true);
+    try {
+      const [c, b] = await Promise.all([mosApi.getCrew(), mosApi.getBranches()]);
+      setCrew(c);
+      setBranches(b);
+    } catch (err) {
+      console.error("Crew sync failure:", err);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+
+    // Listen for real-time status updates from the database
+    const unsubCrew = mosWs.on('CREW_UPDATED', () => fetchData(true));
+    
+    return () => {
+      unsubCrew();
+    };
+  }, []);
+
+  const filteredCrew = useMemo(() => {
+    return crew.filter(c => {
+      const branchName = branches.find(b => b.id === c.branchId)?.name || '';
+      return c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+             c.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
+             branchName.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+  }, [crew, searchQuery, branches]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingCrew) {
-      await mosApi.updateCrew(editingCrew.id, formData);
-    } else {
-      await mosApi.createCrew(formData);
+    setIsSaving(true);
+    try {
+      if (editingCrew) {
+        await mosApi.updateCrew(editingCrew.id, formData);
+      } else {
+        await mosApi.createCrew(formData);
+      }
+      setShowModal(false);
+      await fetchData();
+    } catch (err: any) {
+      alert(`Personnel induction failed: ${err.message}. Ensure connectivity to the Lync Kernel.`);
+    } finally {
+      setIsSaving(false);
     }
-    setShowModal(false);
-    fetchData();
   };
 
   const openEdit = (c: Crew) => {
@@ -49,7 +86,9 @@ const CrewPage: React.FC = () => {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Personnel Core</h1>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-4">
+            Personnel Core {(loading || isRefreshing) && <RefreshCw size={24} className="text-blue-500 animate-spin" />}
+          </h1>
           <p className="text-slate-500 font-medium mt-1">Real-time performance and trust scoring for drivers and conductors</p>
         </div>
         <button 
@@ -72,15 +111,15 @@ const CrewPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100/50">
-            {loading ? (
+            {loading && crew.length === 0 ? (
               <tr><td colSpan={5} className="text-center py-20 text-slate-400 font-black uppercase tracking-widest text-xs">Accessing Distributed Personnel Data...</td></tr>
-            ) : crew.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-20 text-slate-400 font-medium">No personnel found.</td></tr>
-            ) : crew.map(c => (
+            ) : filteredCrew.length === 0 ? (
+              <tr><td colSpan={5} className="text-center py-20 text-slate-400 font-medium">{searchQuery ? `No personnel matching "${searchQuery}"` : "No personnel found."}</td></tr>
+            ) : filteredCrew.map(c => (
               <tr key={c.id} className="hover:bg-slate-50/50 transition-all duration-300 group">
                 <td className="px-10 py-6">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-black text-xl shadow-lg shadow-slate-900/10 border border-slate-800">{c.name.charAt(0)}</div>
+                    <div className="w-12 h-12 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-black text-xl shadow-lg shadow-slate-900/10 border border-slate-800 transition-transform group-hover:scale-110">{c.name.charAt(0)}</div>
                     <div>
                       <p className="font-black text-slate-900 text-lg tracking-tight">{c.name}</p>
                       <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em]">{c.role}</p>
@@ -89,7 +128,7 @@ const CrewPage: React.FC = () => {
                 </td>
                 <td className="px-10 py-6 text-sm text-slate-600 font-black uppercase tracking-widest">{branches.find(b => b.id === c.branchId)?.name || 'Central'}</td>
                 <td className="px-10 py-6">
-                  <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                  <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-colors ${
                     c.status === 'ASSIGNED' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' : 
                     c.status === 'AVAILABLE' ? 'bg-blue-50 text-blue-700 border-blue-100' :
                     'bg-slate-50 text-slate-400 border-slate-100'
@@ -155,8 +194,12 @@ const CrewPage: React.FC = () => {
                   </select>
                 </div>
               </div>
-              <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95">
-                {editingCrew ? 'Commit Identity Update' : 'Initialize Personnel Node'}
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95 disabled:opacity-50"
+              >
+                {isSaving ? 'Processing Kernel Commit...' : (editingCrew ? 'Commit Identity Update' : 'Initialize Personnel Node')}
               </button>
             </form>
           </div>

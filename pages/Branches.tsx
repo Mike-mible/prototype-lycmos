@@ -1,30 +1,60 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { mosApi } from '../services/api';
 import { Branch } from '../types';
-import { MapPin, User, Plus, Trash2, X, Settings } from 'lucide-react';
+import { MapPin, User, Plus, Trash2, X, Settings, RefreshCw } from 'lucide-react';
 
-const Branches: React.FC = () => {
+interface BranchesProps {
+  searchQuery?: string;
+}
+
+const Branches: React.FC<BranchesProps> = ({ searchQuery = '' }) => {
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [formData, setFormData] = useState({ name: '', location: '', manager: '' });
 
-  const fetchBranches = () => mosApi.getBranches().then(setBranches);
+  const fetchBranches = async () => {
+    setLoading(true);
+    try {
+      const data = await mosApi.getBranches();
+      setBranches(data);
+    } catch (err) {
+      console.error("Hub fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => { fetchBranches(); }, []);
 
+  const filteredBranches = useMemo(() => {
+    return branches.filter(b => 
+      b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.location.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [branches, searchQuery]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingBranch) {
-      await mosApi.updateBranch(editingBranch.id, formData);
-    } else {
-      await mosApi.createBranch(formData);
+    setIsSaving(true);
+    try {
+      if (editingBranch) {
+        await mosApi.updateBranch(editingBranch.id, formData);
+      } else {
+        await mosApi.createBranch(formData);
+      }
+      setShowModal(false);
+      setEditingBranch(null);
+      setFormData({ name: '', location: '', manager: '' });
+      await fetchBranches();
+    } catch (err: any) {
+      alert(`Hub initialization failed: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
-    setShowModal(false);
-    setEditingBranch(null);
-    setFormData({ name: '', location: '', manager: '' });
-    fetchBranches();
   };
 
   const openEdit = (branch: Branch) => {
@@ -43,7 +73,9 @@ const Branches: React.FC = () => {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Hub Network</h1>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-4">
+            Hub Network {loading && <RefreshCw size={24} className="text-blue-500 animate-spin" />}
+          </h1>
           <p className="text-slate-500 font-medium mt-1">Global management of regional operational nodes</p>
         </div>
         <button 
@@ -55,7 +87,13 @@ const Branches: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {branches.map(branch => (
+        {loading && branches.length === 0 ? (
+          <div className="col-span-full py-20 text-center text-slate-400 font-black uppercase tracking-widest">Accessing Node Registry...</div>
+        ) : filteredBranches.length === 0 ? (
+          <div className="col-span-full py-20 text-center text-slate-400 bg-white border rounded-[40px]">
+            {searchQuery ? `No hubs matching "${searchQuery}"` : "No hubs found in system logic."}
+          </div>
+        ) : filteredBranches.map(branch => (
           <div key={branch.id} className="bg-white p-8 rounded-[40px] border border-slate-100/80 shadow-[0_20px_50px_rgba(0,0,0,0.03)] hover:shadow-[0_40px_100px_rgba(0,0,0,0.06)] transition-all duration-500 group relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50/50 rounded-bl-[60px] translate-x-12 -translate-y-12 group-hover:translate-x-0 group-hover:-translate-y-0 transition-all duration-500" />
             
@@ -115,8 +153,12 @@ const Branches: React.FC = () => {
                   <input required value={formData.manager} onChange={e => setFormData({...formData, manager: e.target.value})} className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[28px] font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-inner" placeholder="E.G. JANE DOE" />
                 </div>
               </div>
-              <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95">
-                {editingBranch ? 'Sync Node Update' : 'Initialize Hub Node'}
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95 disabled:opacity-50"
+              >
+                {isSaving ? 'Synching Hub Records...' : (editingBranch ? 'Sync Node Update' : 'Initialize Hub Node')}
               </button>
             </form>
           </div>

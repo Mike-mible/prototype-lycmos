@@ -1,36 +1,61 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { mosApi } from '../services/api';
 import { Vehicle, Branch } from '../types';
-import { Bus, Settings, MoreVertical, Search, Plus, X, Users, Trash2 } from 'lucide-react';
+import { Bus, Settings, MoreVertical, Search, Plus, X, Users, Trash2, RefreshCw } from 'lucide-react';
 
-const Vehicles: React.FC = () => {
+interface VehiclesProps {
+  searchQuery?: string;
+}
+
+const Vehicles: React.FC<VehiclesProps> = ({ searchQuery = '' }) => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [formData, setFormData] = useState({ plate: '', branchId: '', capacity: 14, status: 'ACTIVE' as any });
 
   const fetchData = async () => {
     setLoading(true);
-    const [v, b] = await Promise.all([mosApi.getVehicles(), mosApi.getBranches()]);
-    setVehicles(v);
-    setBranches(b);
-    setLoading(false);
+    try {
+      const [v, b] = await Promise.all([mosApi.getVehicles(), mosApi.getBranches()]);
+      setVehicles(v);
+      setBranches(b);
+    } catch (err) {
+      console.error("Fleet sync failure:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
 
+  const filteredVehicles = useMemo(() => {
+    return vehicles.filter(v => {
+      const branchName = branches.find(b => b.id === v.branchId)?.name || '';
+      return v.plate.toLowerCase().includes(searchQuery.toLowerCase()) || 
+             branchName.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+  }, [vehicles, searchQuery, branches]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingVehicle) {
-      await mosApi.updateVehicle(editingVehicle.id, formData);
-    } else {
-      await mosApi.createVehicle(formData);
+    setIsSaving(true);
+    try {
+      if (editingVehicle) {
+        await mosApi.updateVehicle(editingVehicle.id, formData);
+      } else {
+        await mosApi.createVehicle(formData);
+      }
+      setShowModal(false);
+      await fetchData();
+    } catch (err: any) {
+      alert(`Asset registration failed: ${err.message}. Ensure database connection is active.`);
+    } finally {
+      setIsSaving(false);
     }
-    setShowModal(false);
-    fetchData();
   };
 
   const openEdit = (v: Vehicle) => {
@@ -49,7 +74,9 @@ const Vehicles: React.FC = () => {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Vehicle Fleet</h1>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-4">
+            Vehicle Fleet {loading && <RefreshCw size={24} className="text-blue-500 animate-spin" />}
+          </h1>
           <p className="text-slate-500 font-medium mt-1">Real-time status and capacity monitoring for your matatu network</p>
         </div>
         <button 
@@ -74,11 +101,11 @@ const Vehicles: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/50">
-              {loading ? (
+              {loading && vehicles.length === 0 ? (
                 <tr><td colSpan={6} className="text-center py-20 text-slate-400 font-black uppercase tracking-widest text-xs">Syncing Distributed Fleet...</td></tr>
-              ) : vehicles.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-20 text-slate-400 font-medium">No assets registered.</td></tr>
-              ) : vehicles.map(v => (
+              ) : filteredVehicles.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-20 text-slate-400 font-medium">{searchQuery ? `No assets matching "${searchQuery}"` : "No assets registered."}</td></tr>
+              ) : filteredVehicles.map(v => (
                 <tr key={v.id} className="hover:bg-slate-50/50 transition-all duration-300 group">
                   <td className="px-10 py-6">
                     <div className="flex items-center gap-4">
@@ -176,8 +203,12 @@ const Vehicles: React.FC = () => {
                 </div>
               </div>
               
-              <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95">
-                {editingVehicle ? 'Sync Core Asset' : 'Finalize Registration'}
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95 disabled:opacity-50"
+              >
+                {isSaving ? 'Synching Asset Control...' : (editingVehicle ? 'Sync Core Asset' : 'Finalize Registration')}
               </button>
             </form>
           </div>

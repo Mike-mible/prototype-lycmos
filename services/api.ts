@@ -42,6 +42,13 @@ class WebSocketService {
             });
         }
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crew' }, (payload: any) => {
+        this.emit('CREW_UPDATED', { 
+          crewId: payload.new?.id,
+          status: payload.new?.status,
+          message: `Crew member ${payload.new?.name} is now ${payload.new?.status}`
+        });
+      })
       .subscribe((status) => {
         console.log("Supabase Realtime Status:", status);
         if (status === 'SUBSCRIBED') {

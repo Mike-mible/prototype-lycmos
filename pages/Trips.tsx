@@ -1,16 +1,21 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { mosApi, mosWs } from '../services/api';
 import { Trip, Segment, SegmentState, AllowedAction, Vehicle, Crew, Branch } from '../types';
 import { Play, Square, Wallet, AlertOctagon, Repeat, CheckCircle2, Search, Filter, RefreshCw, Plus, X, Handshake } from 'lucide-react';
 
-const Trips: React.FC = () => {
+interface TripsProps {
+  searchQuery?: string;
+}
+
+const Trips: React.FC<TripsProps> = ({ searchQuery = '' }) => {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [crew, setCrew] = useState<Crew[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   
   const [showModal, setShowModal] = useState(false);
@@ -21,6 +26,8 @@ const Trips: React.FC = () => {
     try {
       const [t, b, v, c] = await Promise.all([mosApi.getTrips(), mosApi.getBranches(), mosApi.getVehicles(), mosApi.getCrew()]);
       setTrips(t); setBranches(b); setVehicles(v); setCrew(c);
+    } catch (err) {
+      console.error("Fetch failure:", err);
     } finally { setLoading(false); setIsRefreshing(false); }
   };
 
@@ -29,6 +36,13 @@ const Trips: React.FC = () => {
     const unbind = mosWs.on('SEGMENT_UPDATED', () => fetchData(true));
     return () => unbind();
   }, []);
+
+  const filteredTrips = useMemo(() => {
+    return trips.filter(t => 
+      t.route.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.id.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [trips, searchQuery]);
 
   const handleAction = async (segmentId: string, action: AllowedAction) => {
     setProcessingId(segmentId);
@@ -52,13 +66,13 @@ const Trips: React.FC = () => {
     fetchData();
   };
 
-  // Fix: Implemented handleCreateTrip to handle the trip creation form submission
   const handleCreateTrip = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
       await mosApi.createTrip(
         { 
-          route: formData.route, 
+          route: formData.route.toUpperCase(), 
           overallStatus: 'ACTIVE' 
         }, 
         formData.segments.map(s => ({
@@ -69,10 +83,12 @@ const Trips: React.FC = () => {
         }))
       );
       setShowModal(false);
-      fetchData();
-    } catch (err) {
+      await fetchData();
+    } catch (err: any) {
       console.error("Initialization failure:", err);
-      alert("Logic initialization failed. Check connectivity.");
+      alert(`Logic initialization failed: ${err.message || 'Unknown database error'}. Check if RLS policies are enabled.`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -91,7 +107,7 @@ const Trips: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-4">
-            Trips & Logistics {isRefreshing && <RefreshCw size={24} className="text-blue-500 animate-spin" />}
+            Trips & Logistics {(isRefreshing || loading) && <RefreshCw size={24} className="text-blue-500 animate-spin" />}
           </h1>
           <p className="text-slate-500 font-medium mt-1">Global coordination of cross-branch segments</p>
         </div>
@@ -107,17 +123,17 @@ const Trips: React.FC = () => {
       </div>
 
       <div className="grid gap-8">
-        {loading ? (
+        {loading && trips.length === 0 ? (
           <div className="p-32 text-center text-slate-400 font-black uppercase tracking-[0.3em] text-xs">Synchronizing Core Engine...</div>
-        ) : trips.length === 0 ? (
+        ) : filteredTrips.length === 0 ? (
           <div className="p-20 text-center bg-white rounded-[40px] border border-slate-100 text-slate-400 font-medium">
-            No active trips in the system.
+            {searchQuery ? `No trips matching "${searchQuery}"` : "No active trips in the system."}
           </div>
-        ) : trips.map(trip => (
+        ) : filteredTrips.map(trip => (
           <div key={trip.id} className="bg-white rounded-[40px] shadow-[0_30px_60px_rgba(0,0,0,0.03)] border border-slate-100/80 overflow-hidden group">
             <div className="p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-4">
-                <span className="text-[10px] font-black px-3 py-1 bg-slate-900 text-white rounded-full uppercase tracking-widest">{trip.id}</span>
+                <span className="text-[10px] font-black px-3 py-1 bg-slate-900 text-white rounded-full uppercase tracking-widest truncate max-w-[100px]">{trip.id}</span>
                 <h3 className="text-2xl font-black text-slate-900">{trip.route}</h3>
               </div>
               <div className="flex items-center gap-6">
@@ -141,7 +157,7 @@ const Trips: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100/50">
-                  {trip.segments.map(seg => (
+                  {trip.segments?.map(seg => (
                     <tr key={seg.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-5">
                         <div className="flex flex-col">
@@ -156,7 +172,7 @@ const Trips: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5 text-center">
-                        <span className="text-sm font-black text-slate-900">KES {seg.revenue.toLocaleString()}</span>
+                        <span className="text-sm font-black text-slate-900">KES {(seg.revenue || 0).toLocaleString()}</span>
                       </td>
                       <td className="px-6 py-5 text-center">
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${getStateColor(seg.state)}`}>
@@ -165,16 +181,16 @@ const Trips: React.FC = () => {
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex items-center justify-end gap-2">
-                          {seg.allowedActions.includes('START') && (
+                          {seg.allowedActions?.includes('START') && (
                             <button disabled={processingId === seg.id} onClick={() => handleAction(seg.id, 'START')} className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-100 border border-emerald-100 shadow-sm transition-all active:scale-95" title="Initialize Segment"><Play size={18} fill="currentColor" /></button>
                           )}
-                          {seg.allowedActions.includes('CONFIRM_HANDOVER') && (
+                          {seg.allowedActions?.includes('CONFIRM_HANDOVER') && (
                             <button disabled={processingId === seg.id} onClick={() => handleAction(seg.id, 'CONFIRM_HANDOVER')} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-100 border border-indigo-100 shadow-sm transition-all active:scale-95" title="Confirm Handover"><Handshake size={18} /></button>
                           )}
-                          {seg.allowedActions.includes('DECLARE_REVENUE') && (
+                          {seg.allowedActions?.includes('DECLARE_REVENUE') && (
                             <button disabled={processingId === seg.id} onClick={() => handleAction(seg.id, 'DECLARE_REVENUE')} className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl hover:bg-amber-100 border border-amber-100 shadow-sm transition-all active:scale-95" title="Declare Earnings"><Wallet size={18} /></button>
                           )}
-                          {seg.allowedActions.includes('END') && (
+                          {seg.allowedActions?.includes('END') && (
                             <button disabled={processingId === seg.id} onClick={() => handleAction(seg.id, 'END')} className="p-2.5 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all active:scale-95" title="Terminate Segment"><Square size={18} fill="currentColor" /></button>
                           )}
                         </div>
@@ -243,8 +259,12 @@ const Trips: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95 transition-all">
-                Initialize Distributed Journey
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black text-lg uppercase tracking-widest hover:bg-blue-700 shadow-[0_20px_50px_rgba(37,99,235,0.3)] active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isSaving ? 'Initializing Kernel Record...' : 'Initialize Distributed Journey'}
               </button>
             </form>
           </div>
