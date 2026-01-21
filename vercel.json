@@ -1,15 +1,32 @@
 
 {
+  "version": 2,
   "builds": [
     {
-      "src": "dist/index.js",
+      "src": "src/index.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
+      "src": "/status",
+      "dest": "src/index.ts"
+    },
+    {
+      "src": "/trips(.*)",
+      "dest": "src/index.ts"
+    },
+    {
+      "src": "/saccos(.*)",
+      "dest": "src/index.ts"
+    },
+    {
+      "src": "/operators(.*)",
+      "dest": "src/index.ts"
+    },
+    {
       "src": "/(.*)",
-      "dest": "dist/index.js"
+      "dest": "src/index.ts"
     }
   ]
 }

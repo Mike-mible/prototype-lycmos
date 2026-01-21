@@ -3,7 +3,7 @@
   "name": "lyncapp-mos-core",
   "version": "1.0.0",
   "description": "LyncApp Mobility Operating System Core - Production Backend",
-  "main": "dist/index.js",
+  "main": "src/index.ts",
   "engines": {
     "node": "22.x"
   },
