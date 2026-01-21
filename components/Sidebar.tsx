@@ -9,7 +9,6 @@ import {
   AlertTriangle, 
   MessageSquare,
   ChevronRight,
-  ChevronLeft,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen
@@ -20,6 +19,7 @@ interface SidebarProps {
   setActivePage: (page: string) => void;
   isCollapsed: boolean;
   onToggle: () => void;
+  onLogout: () => void;
 }
 
 const navItems = [
@@ -33,7 +33,7 @@ const navItems = [
   { id: 'sms', label: 'SMS Tickets', icon: MessageSquare },
 ];
 
-const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, isCollapsed, onToggle }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, isCollapsed, onToggle, onLogout }) => {
   return (
     <div 
       className={`bg-slate-900 text-white flex flex-col h-full fixed left-0 top-0 z-50 transition-all duration-300 ${
@@ -98,6 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, isCollapse
 
       <div className={`p-4 border-t border-slate-800 ${isCollapsed ? 'flex justify-center' : ''}`}>
         <button 
+          onClick={onLogout}
           className={`flex items-center text-slate-400 hover:text-red-400 transition-colors ${
             isCollapsed ? 'w-12 h-12 justify-center' : 'w-full gap-3 px-4 py-3'
           }`}

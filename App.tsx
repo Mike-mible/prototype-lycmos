@@ -10,7 +10,9 @@ import SMSTickets from './pages/SMSTickets';
 import Incidents from './pages/Incidents';
 import RevenueAnalytics from './pages/RevenueAnalytics';
 import Onboarding from './pages/Onboarding';
+import Auth from './pages/Auth';
 import { mosWs } from './services/api';
+import { supabase } from './services/supabase';
 import { Bell, Search, User, Zap, ZapOff, Info, X } from 'lucide-react';
 import { OnboardingData } from './types';
 
@@ -25,13 +27,34 @@ const App: React.FC = () => {
   const [wsConnected, setWsConnected] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  
+  const [session, setSession] = useState<any>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if onboarding is completed
-    const isCompleted = localStorage.getItem('lync_onboarding_completed') === 'true';
-    setOnboardingCompleted(isCompleted);
+    // 1. Check for active Supabase session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      
+      // 2. If logged in, check onboarding status
+      if (session) {
+        const isCompleted = localStorage.getItem('lync_onboarding_completed') === 'true';
+        setOnboardingCompleted(isCompleted);
+      }
+      setLoading(false);
+    });
 
+    // 3. Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        const isCompleted = localStorage.getItem('lync_onboarding_completed') === 'true';
+        setOnboardingCompleted(isCompleted);
+      }
+    });
+
+    // 4. Connect to Real-time system
     mosWs.connect();
     const unsubStatus = mosWs.onStatusChange(setWsConnected);
 
@@ -48,6 +71,7 @@ const App: React.FC = () => {
     const unsubTickets = mosWs.on('NEW_SMS_TICKET', addNotification);
 
     return () => {
+      subscription.unsubscribe();
       unsubStatus();
       unsubSegment();
       unsubRevenue();
@@ -56,10 +80,14 @@ const App: React.FC = () => {
   }, []);
 
   const handleOnboardingComplete = (data: OnboardingData) => {
-    console.log("Onboarding data received:", data);
     localStorage.setItem('lync_onboarding_completed', 'true');
     localStorage.setItem('lync_sacco_name', data.saccoName);
     setOnboardingCompleted(true);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
   };
 
   const renderPage = () => {
@@ -76,8 +104,21 @@ const App: React.FC = () => {
     }
   };
 
-  if (onboardingCompleted === null) return null; // Wait for initial check
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
+        <p className="text-slate-500 font-black uppercase tracking-[0.3em] text-[10px]">Kernel Synchronizing</p>
+      </div>
+    );
+  }
 
+  // Auth Guard
+  if (!session) {
+    return <Auth onSession={setSession} />;
+  }
+
+  // Onboarding Guard
   if (!onboardingCompleted) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
@@ -89,6 +130,7 @@ const App: React.FC = () => {
         setActivePage={setActivePage} 
         isCollapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onLogout={handleLogout}
       />
       
       <main 
@@ -145,7 +187,7 @@ const App: React.FC = () => {
                 <User size={20} className="text-slate-600" />
               </div>
               <div className="text-left hidden sm:block">
-                <p className="text-sm font-bold text-slate-900">Admin User</p>
+                <p className="text-sm font-bold text-slate-900">{session.user?.email?.split('@')[0] || 'Admin User'}</p>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   {localStorage.getItem('lync_sacco_name') || 'Super Admin'}
                 </p>
